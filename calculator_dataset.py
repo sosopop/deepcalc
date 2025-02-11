@@ -6,12 +6,39 @@ from torch.utils.data import Dataset, DataLoader
 import calculator_vocab  # 请确保 calculator_vocab.py 与本文件在同一目录下
 import gmpy2  # 第三方大数运算库，需提前安装： pip install gmpy2
 
-def generate_random_number_str(max_digit):
+import random
+
+def generate_random_number_str(max_digit, max_digit_ratio=0.5):
     """
     随机生成一个数字字符串，位数在 [1, max_digit] 之间。
     多位数的首位不为 '0'。
+    
+    参数:
+        max_digit: 最大位数
+        max_digit_ratio: 控制生成最大位数数字所占比例的参数。
+                         当 max_digit_ratio > 0 时：
+                           有 max_digit_ratio 的概率生成 max_digit 位数字，
+                           其余 (1 - max_digit_ratio) 的概率在 1 到 max_digit-1 位之间均匀采样。
+                         当 max_digit_ratio == 0 时：
+                           在 1 到 max_digit 之间均匀采样（不使用比例控制策略）。
     """
-    num_digits = random.randint(1, max_digit)
+    # 如果只有1位，则直接生成
+    if max_digit == 1:
+        return str(random.randint(0, 9))
+    
+    # 根据 max_digit_ratio 决定生成数字的位数
+    if max_digit_ratio == 0:
+        # 均匀采样 1 到 max_digit 之间的数字位数
+        num_digits = random.randint(1, max_digit)
+    else:
+        # 按比例策略：以 max_digit_ratio 的概率生成 max_digit 位数字，
+        # 否则在 1 到 max_digit-1 之间均匀采样
+        if random.random() < max_digit_ratio:
+            num_digits = max_digit
+        else:
+            num_digits = random.randint(1, max_digit - 1)
+    
+    # 根据位数生成随机数字：多位数的首位不能为 '0'
     if num_digits == 1:
         return str(random.randint(0, 9))
     else:
