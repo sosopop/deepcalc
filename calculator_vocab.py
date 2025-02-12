@@ -10,7 +10,7 @@ class CalculatorVocab:
         # 将结束符和填充符放到词汇表最后
         self.vocab = [
             '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-            '.', '+', '-', '*', '/', '(', ')', '=', '\'', ';',
+            '.', '+', '-', '*', '/', '(', ')', '=', '_', ';',
             self.end_token, self.pad_token
         ]
         self.vocab_to_idx = {ch: idx for idx, ch in enumerate(self.vocab)}

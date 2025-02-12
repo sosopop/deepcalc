@@ -67,41 +67,71 @@ def validate(model, vocab, device, val_loader):
     total = 0
     correct = 0
 
+    # 用于分别统计各运算符的正确数量和总样本数
+    op_acc = {
+        '+': {'correct': 0, 'total': 0},
+        '-': {'correct': 0, 'total': 0},
+        '*': {'correct': 0, 'total': 0},
+        '/': {'correct': 0, 'total': 0},
+    }
+
     end_token_idx = vocab.vocab_to_idx[vocab.end_token]
     equal_token_idx = vocab.vocab_to_idx['=']
 
+    # 注意：val_loader 中每个 batch 返回的是 (tensor, [原始算式字符串列表])
     with torch.no_grad():
         pbar = tqdm.tqdm(val_loader, desc='Validating', leave=False)
-        for batch, _ in pbar:
+        for batch, eq_str_list in pbar:
             batch = batch.to(device)
             tgt_input = batch[:, :-1]  # 模型输入（去掉最后一个 token）
             tgt_output = batch[:, 1:]  # 目标输出（去掉第一个 token）
 
-            output = model(tgt_input)  # (batch_size, seq_len-1, vocab_size)
-            pred = output.argmax(dim=-1)  # (batch_size, seq_len-1) 取最大概率索引
+            output = model(tgt_input)  # shape: (batch_size, seq_len-1, vocab_size)
+            pred = output.argmax(dim=-1)  # 预测序列
 
-            # 创建 mask，屏蔽 = 之前的部分和 end_token 之后的部分
-            valid_mask = torch.ones_like(tgt_output, dtype=torch.bool)  # 先假设所有字符有效
-            for i in range(batch.size(0)):  # 遍历 batch 内每个样本
-                eq_pos = (tgt_output[i] == equal_token_idx).nonzero(as_tuple=True)[0]  # 找 '=' 的位置
-                end_pos = (tgt_output[i] == end_token_idx).nonzero(as_tuple=True)[0]  # 找 end_token 位置
+            # 构造 mask：将 '=' 之前以及 end_token 之后的部分设为无效
+            valid_mask = torch.ones_like(tgt_output, dtype=torch.bool)
+            for i in range(batch.size(0)):
+                eq_pos = (tgt_output[i] == equal_token_idx).nonzero(as_tuple=True)[0]
+                end_pos = (tgt_output[i] == end_token_idx).nonzero(as_tuple=True)[0]
+                if len(eq_pos) > 0:  # 如果存在 '='，则其之前的部分不计入预测
+                    valid_mask[i, :eq_pos[0] + 1] = False
+                if len(end_pos) > 0:  # 如果存在 end_token，则其之后的部分不计入预测
+                    valid_mask[i, end_pos[0] + 1:] = False
 
-                if len(eq_pos) > 0:  # 有 =
-                    valid_mask[i, :eq_pos[0] + 1] = False  # = 之前的部分无效（包括 = 本身）
-
-                if len(end_pos) > 0:  # 有 end_token
-                    valid_mask[i, end_pos[0] + 1:] = False  # end_token 之后的部分无效
-
-            # 计算准确率（仅对有效部分比较）
+            # 对于无效位置，不管预测是否正确，都视为正确
             matches = (pred == tgt_output) & valid_mask
-            matches = matches == valid_mask
-            correct += matches.all(dim=1).sum().item()  # 只有完全匹配的样本才算正确
-            total += batch.size(0)
+            matches = matches == valid_mask  # 对于 mask=False 的位置，总是 True
+            batch_correct = matches.all(dim=1)  # 每个样本是否所有有效位置均预测正确
 
+            # 根据原始算式字符串判断运算符，统计各自的正确样本数量
+            for i, eq in enumerate(eq_str_list):
+                op_type = None
+                # 此处简单地根据字符串中是否包含运算符判断类型
+                for op in ['+', '-', '*', '/']:
+                    if op in eq:
+                        op_type = op
+                        break
+                if op_type is not None:
+                    op_acc[op_type]['total'] += 1
+                    if batch_correct[i].item():
+                        op_acc[op_type]['correct'] += 1
+
+            correct += batch_correct.sum().item()
+            total += batch.size(0)
             pbar.set_postfix(accuracy=f"{correct/total:.4f}")
 
-    accuracy = correct / total if total > 0 else 0
-    return accuracy
+    overall_accuracy = correct / total if total > 0 else 0
+
+    # 计算分别的准确率
+    separate_accuracy = {}
+    for op, counts in op_acc.items():
+        if counts['total'] > 0:
+            separate_accuracy[op] = counts['correct'] / counts['total']
+        else:
+            separate_accuracy[op] = None
+
+    return overall_accuracy, separate_accuracy
 
 def save_checkpoint(model, optimizer, epoch, loss, current_digits, accuracy, checkpoint_dir):
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -177,11 +207,16 @@ if __name__ == '__main__':
     logging.info("Training...")
     for epoch in range(start_epoch, 1000):
         loss = train(model, vocab, device, train_loader, optimizer, criterion, epoch)
-        accuracy = validate(model, vocab, device, val_loader)
-        logging.info(f"Epoch {epoch+1}: Loss={loss:.5f}, Accuracy={accuracy:.5f}, Current digits={current_digits}")
+        overall_accuracy, separate_accuracy = validate(model, vocab, device, val_loader)
+        logging.info(f"Epoch {epoch+1}: Loss={loss:.5f}, Overall Accuracy={overall_accuracy:.5f}, Current digits={current_digits}")
+        for op, acc in separate_accuracy.items():
+            if acc is not None:
+                logging.info("Accuracy for {}: {:.4f}".format(op, acc))
+            else:
+                logging.info("Accuracy for {}: N/A (no samples)".format(op))
 
-        if accuracy > best_accuracy:
-            if accuracy == 1.0:
+        if overall_accuracy > best_accuracy:
+            if overall_accuracy == 1.0:
                 if current_digits < max_digit:
                     current_digits += 1
                     logging.info(f"Increased digits to {current_digits}")
@@ -199,7 +234,7 @@ if __name__ == '__main__':
                             logging.info(sample_str)
                         break
             else:
-                best_accuracy = accuracy
+                best_accuracy = overall_accuracy
                 
             checkpoint_filepath = save_checkpoint(model, optimizer, epoch, loss, current_digits, best_accuracy, checkpoint_dir)
             logging.info(f"Checkpoint saved: {checkpoint_filepath}")
