@@ -2,4 +2,4 @@ test_0.py
 test_1.py
 test_2.py
 __pycache__/
-checkpoints/
+checkpoints*/

@@ -4,6 +4,7 @@ import torch
 import logging
 import calculator_vocab
 import calculator_model
+import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -79,6 +80,7 @@ def main():
         question = user_input[:user_input.index('=')+1]
         result = question
 
+        print("开始推理：")
         # 自回归生成过程：最多生成 (max_length - len(question)) 个字符
         for _ in range(max_length - len(question)):
             # 将当前结果编码为固定长度的 token 序列
@@ -91,8 +93,14 @@ def main():
             if next_token == end_token_idx:
                 break
             # 将生成的 token 转为字符，并追加到结果中
-            result += vocab.idx_to_vocab[next_token]
-        print("生成结果:", result)
+            c = vocab.idx_to_vocab[next_token]
+            result += c
+            print(c, end='', flush=True)
+            time.sleep(0.2)
+
+        print()
+        result = result[:result.index('=')+1] + result[result.rindex('=')+1:]
+        print("最终结果:", result)
 
 if __name__ == "__main__":
     main()
