@@ -82,15 +82,14 @@ def add_with_steps(a_str, b_str):
     
     if len(a_str) == 1 and len(b_str) == 1:
         return f"{a_str}+{b_str}={result_str}"
-    return f"{a_str}+{b_str}={''.join(steps)}={result_str}"
+    return f"{a_str}+{b_str}={';'.join(steps)}={result_str}"
 
 def sub_with_steps(a_str, b_str):
     """
-    生成减法的中间步骤字符串，格式示例："18-23=5501=_-5"
+    生成减法的中间步骤字符串，格式示例："218-387=916010=-169"
     步骤说明：
     - 当被减数小于减数时，交换两者并添加负号
     - 步骤部分每两位表示当前位计算结果和借位
-    - 最终结果以'_'开头标记负数（如"_-5"）
     """
     # 比较数值大小决定是否交换
     sign = 1
@@ -135,16 +134,12 @@ def sub_with_steps(a_str, b_str):
     
     if len(a_str) == 1 and len(b_str) == 1:
         return f"{original_equation}={result_str}"
-    return f"{original_equation}={''.join(steps)}={result_str}"
+    return f"{original_equation}={';'.join(steps)}={result_str}"
 
 def mul_with_steps(a_str, b_str):
     """
     生成乘法的中间步骤字符串，格式示例：
-    "12*34=8+40+60+300=408"
-    步骤说明：
-    - 分号分隔每个位乘法的中间结果（已补零对齐）
-    - 每个中间结果的格式为：当前位乘积 + 补零数（位数等于i+j）
-    - 最终结果在最后一个等号后
+    723*984=120828241656271863=252
     """
     reversed_a = a_str[::-1]  # 被乘数反转（从个位开始）
     reversed_b = b_str[::-1]  # 乘数反转（从个位开始）
@@ -159,16 +154,17 @@ def mul_with_steps(a_str, b_str):
             # 计算当前位的乘积
             product = int(b_digit) * int(a_digit)
             # 计算需要补的零数（等于位权之和）
-            zeros = i + j
+            # zeros = i + j
             # 生成中间结果字符串（保留所有数字和补零）
-            partial = f"{product}{'0' * zeros}"
+            # partial = f"{product}{'0' * zeros}"
+            partial = f"{product:02d}"
             partials.append(partial)
     
     # 计算最终结果（所有中间结果求和）
     final_result = sum(int(p) for p in partials)
     
     # 拼接完整步骤字符串
-    steps_str = '+'.join(partials)
+    steps_str = ';'.join(partials)
     
     if len(a_str) == 1 and len(b_str) == 1:
         return f"{a_str}*{b_str}={final_result}"
@@ -178,7 +174,7 @@ def div_with_steps(a_str, b_str):
     """
     生成除法的中间步骤字符串，格式示例：
       "123/4=013003=30_3"
-    算法说明（模拟长除法）：
+    算法说明（模拟除法）：
       - 从被除数的最高位开始依次取数，与除数比较；
       - 如果当前数字小于除数，则当前商位为 0，并记录 (0,当前余数)；
       - 否则，计算当前商位 q = 当前数字 // 除数，更新余数为 当前数字 - q * 除数，并记录 (q,余数)。
@@ -211,7 +207,7 @@ def div_with_steps(a_str, b_str):
         quotient_str = str(int(quotient_str))
     
     final_result = quotient_str if current == 0 else quotient_str + '_' + str(current)
-    steps_str = ''.join(steps)
+    steps_str = ';'.join(steps)
     
     if len(a_str) == 1 and len(b_str) == 1:
         return f"{a_str}/{b_str}={final_result}"
@@ -231,19 +227,25 @@ class CalculatorDataset(Dataset):
         # 随机选择运算符（扩展为四种：加、减、乘、除）
         op = random.choice(['+', '-', '*', '/'])
         
-        a = generate_random_number_str(self.max_digit)
-        b = generate_random_number_str(self.max_digit)
         
         if op == '-':
+            a = generate_random_number_str(self.max_digit, max_digit_ratio=0.7)
+            b = generate_random_number_str(self.max_digit, max_digit_ratio=0.7)
             eq_str = sub_with_steps(a, b)
         elif op == '*':
+            a = generate_random_number_str(self.max_digit, max_digit_ratio=0.5)
+            b = generate_random_number_str(self.max_digit, max_digit_ratio=0.5)
             eq_str = mul_with_steps(a, b)
         elif op == '/':
+            a = generate_random_number_str(self.max_digit, max_digit_ratio=0.7)
+            b = generate_random_number_str(self.max_digit, max_digit_ratio=0.1)
             # 确保除数 b 不为 0
             while b == "0":
-                b = generate_random_number_str(self.max_digit)
+                b = generate_random_number_str(self.max_digit, max_digit_ratio=0.1)
             eq_str = div_with_steps(a, b)
         else:  # op == '+'
+            a = generate_random_number_str(self.max_digit, max_digit_ratio=0.7)
+            b = generate_random_number_str(self.max_digit, max_digit_ratio=0.7)
             eq_str = add_with_steps(a, b)
         
         encoded = self.vocab.encode(eq_str, max_length=self.max_length, pad=True)
@@ -257,11 +259,8 @@ if __name__ == '__main__':
     max_length = 128
     
     dataset = CalculatorDataset(num_samples, max_length, max_digit, vocab_obj)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
     
     for batch, batch_str in dataloader:
-        print("Batch数据形状:", batch.shape)
-        print("\n示例样本:")
         for s in batch_str:
             print(s)
-        break
