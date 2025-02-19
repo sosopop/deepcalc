@@ -256,7 +256,7 @@ if __name__ == '__main__':
     vocab_obj = calculator_vocab.CalculatorVocab()
     num_samples = 100
     max_digit = 3  # 测试时使用较小位数方便观察
-    max_length = 128
+    max_length = 256
     
     dataset = CalculatorDataset(num_samples, max_length, max_digit, vocab_obj)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)

@@ -31,8 +31,8 @@ def load_latest_checkpoint(checkpoint_dir, model, device):
 
 def main():
     # 参数设置（应与训练时保持一致）
-    max_length = 128
-    embed_size = 64
+    max_length = 256
+    embed_size = 128
     num_heads = 8
     num_layers = 6
     hidden_dim = 2048

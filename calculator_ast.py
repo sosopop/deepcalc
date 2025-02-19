@@ -283,11 +283,11 @@ def generate_random_ast(max_depth=3, int_prob=1.0, max_digit=4, max_digit_ratio=
                 left = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
                 right = generate_random_ast(max_depth-1, int_prob, max_digit, 0.2)
             elif op == TokenType.MUL:
-                left = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
-                right = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
+                left = generate_random_ast(max_depth-1, int_prob, 2 if max_digit > 2 else max_digit, 0.5)
+                right = generate_random_ast(max_depth-1, int_prob, 2 if max_digit > 2 else max_digit, 0.5)
             elif op == TokenType.DIV:
                 left = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
-                right = generate_random_ast(max_depth-1, int_prob, max_digit, 0.1)
+                right = generate_random_ast(max_depth-1, int_prob, max_digit, 0.01)
             return BinaryOpNode(left, op, right)
 
 # ================================ AST转字符串 ================================
@@ -460,9 +460,6 @@ def mul_with_steps(a, b):
     return f"{a}*{b}={steps_str}={sign * result_abs}"
 
 def div_with_steps(a, b):
-    if b == 0:
-        return "Division by zero"
-    
     def _div_positive(a_pos, b_pos):
         steps = []
         current = 0
@@ -531,6 +528,11 @@ def calculate_steps(node):
                 expr = mul_with_steps(left_val, right_val)
                 current_val = left_val * right_val
             elif n.op == TokenType.DIV:
+                # 检查除数是否为零
+                if right_val == 0:
+                    error_expr = f"{left_expr}/{right_expr}=E"
+                    steps.append(error_expr)
+                    raise ZeroDivisionError("Division by zero")
                 expr = div_with_steps(left_val, right_val)
                 current_val = left_val // right_val
 
@@ -542,8 +544,12 @@ def calculate_steps(node):
         else:
             raise ValueError("未知节点类型")
 
-    final_value, _ = _evaluate(node)
-    return final_value, steps
+    try:
+        final_value, _ = _evaluate(node)
+        return final_value, steps
+    except ZeroDivisionError:
+        # 捕获除零错误，返回'E'作为结果
+        return 'E', steps
 
 if __name__ == '__main__':
     # 测试用例
@@ -569,14 +575,17 @@ if __name__ == '__main__':
         ast = generate_random_ast(max_depth=2)
         expr = ast_to_string(ast)
         print(f"随机生成的表达式: {expr}")
-        try:
-            lexer = Lexer(expr)
-            parser = Parser(lexer)
-            parsed_ast = parser.parse()
-            result, steps = calculate_steps(ast)
-            print(f"计算步骤: {steps}")
-            print(f"结果: {result}\n")
-            print(f"完整步骤: {expr}={'|'.join(steps)}\n")
+        lexer = Lexer(expr)
+        parser = Parser(lexer)
+        parsed_ast = parser.parse()
+        result, steps = calculate_steps(ast)
+        print(f"计算步骤: {steps}")
+        print(f"结果: {result}\n")
+        print(f"完整步骤: {expr}={'|'.join(steps)}\n")
+        if result == 'E':
+            try:
+                assert result == eval(expr.replace('/','//'))
+            except ZeroDivisionError:
+                pass
+        else:
             assert result == eval(expr.replace('/','//'))
-        except ZeroDivisionError as e:
-            print(f"解析或计算错误: {str(e)}\n")

@@ -5,8 +5,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 import calculator_vocab
 import calculator_model
-import calculator_dataset_reason as calculator_dataset
-# import calculator_dataset
+import calculator_dataset_ast_reason as calculator_dataset
 import tqdm
 import os
 import logging
@@ -67,18 +66,9 @@ def validate(model, vocab, device, val_loader):
     total = 0
     correct = 0
 
-    # 用于分别统计各运算符的正确数量和总样本数
-    op_acc = {
-        '+': {'correct': 0, 'total': 0},
-        '-': {'correct': 0, 'total': 0},
-        '*': {'correct': 0, 'total': 0},
-        '/': {'correct': 0, 'total': 0},
-    }
-
     end_token_idx = vocab.vocab_to_idx[vocab.end_token]
     equal_token_idx = vocab.vocab_to_idx['=']
 
-    # 注意：val_loader 中每个 batch 返回的是 (tensor, [原始算式字符串列表])
     with torch.no_grad():
         pbar = tqdm.tqdm(val_loader, desc='Validating', leave=False)
         for batch, eq_str_list in pbar:
@@ -104,36 +94,14 @@ def validate(model, vocab, device, val_loader):
             matches = matches == valid_mask  # 对于 mask=False 的位置，总是 True
             batch_correct = matches.all(dim=1)  # 每个样本是否所有有效位置均预测正确
 
-            # 根据原始算式字符串判断运算符，统计各自的正确样本数量
-            for i, eq in enumerate(eq_str_list):
-                op_type = None
-                # 此处简单地根据字符串中是否包含运算符判断类型
-                for op in ['+', '-', '*', '/']:
-                    if op in eq:
-                        op_type = op
-                        break
-                if op_type is not None:
-                    op_acc[op_type]['total'] += 1
-                    if batch_correct[i].item():
-                        op_acc[op_type]['correct'] += 1
-
             correct += batch_correct.sum().item()
             total += batch.size(0)
             pbar.set_postfix(accuracy=f"{correct/total:.4f}")
 
     overall_accuracy = correct / total if total > 0 else 0
+    return overall_accuracy
 
-    # 计算分别的准确率
-    separate_accuracy = {}
-    for op, counts in op_acc.items():
-        if counts['total'] > 0:
-            separate_accuracy[op] = counts['correct'] / counts['total']
-        else:
-            separate_accuracy[op] = None
-
-    return overall_accuracy, separate_accuracy
-
-def save_checkpoint(model, optimizer, epoch, loss, current_digits, accuracy, checkpoint_dir):
+def save_checkpoint(model, optimizer, epoch, loss, current_digits, current_depth, accuracy, checkpoint_dir):
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_filename = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch+1}_loss_{loss:.3f}_accuracy_{accuracy:.5f}_digits_{current_digits}.pth")
     torch.save({
@@ -141,6 +109,7 @@ def save_checkpoint(model, optimizer, epoch, loss, current_digits, accuracy, che
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'current_digits': current_digits,
+        'current_depth': current_depth,
         'loss': loss,
         'accuracy': accuracy
     }, checkpoint_filename)
@@ -152,16 +121,17 @@ def load_checkpoint(checkpoint_path, model, optimizer):
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
     current_digits = checkpoint['current_digits']
+    current_depth = checkpoint['current_depth']
     accuracy = checkpoint['accuracy'] if 'accuracy' in checkpoint else 0.0
     loss = checkpoint['loss'] if 'loss' in checkpoint else 0.0
-    return epoch, loss, current_digits, accuracy
+    return epoch, loss, current_digits, current_depth, accuracy
 
 if __name__ == '__main__':
-    batch_size = 64
-    max_length = 128
+    batch_size = 128
+    max_length = 256
     num_samples = 100000
     max_digit = 20
-    embed_size = 64
+    embed_size = 128
     num_heads = 8
     num_layers = 6
     hidden_dim = 2048
@@ -170,17 +140,18 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     vocab = calculator_vocab.CalculatorVocab()
     
-    model = calculator_model.TransformerDecoderModel(vocab.vocab_size, 
-                                                     embed_size=embed_size, 
-                                                     num_heads=num_heads, 
-                                                     hidden_dim=hidden_dim, 
-                                                     num_layers=num_layers, 
-                                                     max_length=max_length, 
+    model = calculator_model.TransformerDecoderModel(vocab.vocab_size,
+                                                     embed_size=embed_size,
+                                                     num_heads=num_heads,
+                                                     hidden_dim=hidden_dim,
+                                                     num_layers=num_layers,
+                                                     max_length=max_length,
                                                      pad_idx=vocab.vocab_to_idx[vocab.pad_token]).to(device)
     criterion = nn.CrossEntropyLoss(ignore_index=vocab.vocab_to_idx[vocab.pad_token])
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     current_digits = 1
+    current_depth = 1
     start_epoch = 0
     loss = 0.0
     best_accuracy = 0.0
@@ -189,12 +160,12 @@ if __name__ == '__main__':
     if os.path.exists(checkpoint_dir):
         latest_checkpoint_path = max([os.path.join(checkpoint_dir, f) for f in os.listdir(checkpoint_dir) if f.startswith('checkpoint_epoch_')], key=os.path.getctime)
         if latest_checkpoint_path:
-            start_epoch, loss, current_digits, best_accuracy = load_checkpoint(latest_checkpoint_path, model, optimizer)
-            logging.info(f"Resuming from epoch {start_epoch}, loss {loss:.5f}, current_digits {current_digits}, best_accuracy {best_accuracy:.5f}")
+            start_epoch, loss, current_digits, current_depth, best_accuracy = load_checkpoint(latest_checkpoint_path, model, optimizer)
+            logging.info(f"Resuming from epoch {start_epoch}, loss {loss:.5f}, current_digits {current_digits}, current_depth {current_depth}, best_accuracy {best_accuracy:.5f}")
 
-    train_dataset = calculator_dataset.CalculatorDataset(num_samples, max_length, current_digits, vocab)
+    train_dataset = calculator_dataset.CalculatorDataset(num_samples, max_length, current_digits, current_depth, vocab)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-    val_dataset = calculator_dataset.CalculatorDataset(num_samples//10, max_length, current_digits, vocab)
+    val_dataset = calculator_dataset.CalculatorDataset(num_samples//10, max_length, current_digits, current_depth, vocab)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
     logging.info("Example of training data:")
@@ -207,22 +178,21 @@ if __name__ == '__main__':
     logging.info("Training...")
     for epoch in range(start_epoch, 1000):
         loss = train(model, vocab, device, train_loader, optimizer, criterion, epoch)
-        overall_accuracy, separate_accuracy = validate(model, vocab, device, val_loader)
+        overall_accuracy = validate(model, vocab, device, val_loader)
         logging.info(f"Epoch {epoch+1}: Loss={loss:.5f}, Overall Accuracy={overall_accuracy:.5f}, Current digits={current_digits}")
-        for op, acc in separate_accuracy.items():
-            if acc is not None:
-                logging.info("Accuracy for {}: {:.4f}".format(op, acc))
-            else:
-                logging.info("Accuracy for {}: N/A (no samples)".format(op))
 
         if overall_accuracy > best_accuracy:
-            if overall_accuracy == 1.0:
+            if overall_accuracy > 0.95:
                 if current_digits < max_digit:
-                    current_digits += 1
-                    logging.info(f"Increased digits to {current_digits}")
-                    train_dataset = calculator_dataset.CalculatorDataset(num_samples, max_length, current_digits, vocab)
+                    if current_depth <= current_digits:
+                        current_depth += 1
+                        logging.info(f"Increased depth to {current_depth}")
+                    else:
+                        current_digits += 1
+                        logging.info(f"Increased digits to {current_digits}")
+                    train_dataset = calculator_dataset.CalculatorDataset(num_samples, max_length, current_digits, current_depth, vocab)
                     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
-                    val_dataset = calculator_dataset.CalculatorDataset(num_samples//10, max_length, current_digits, vocab)
+                    val_dataset = calculator_dataset.CalculatorDataset(num_samples//10, max_length, current_digits, current_depth, vocab)
                     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
                     best_accuracy = 0.0
                     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -236,6 +206,5 @@ if __name__ == '__main__':
             else:
                 best_accuracy = overall_accuracy
                 
-            checkpoint_filepath = save_checkpoint(model, optimizer, epoch, loss, current_digits, best_accuracy, checkpoint_dir)
+            checkpoint_filepath = save_checkpoint(model, optimizer, epoch, loss, current_digits, current_depth, best_accuracy, checkpoint_dir)
             logging.info(f"Checkpoint saved: {checkpoint_filepath}")
-        

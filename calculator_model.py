@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=512):
+    def __init__(self, d_model, max_len=256):
         """
         使用 register_buffer 注册位置编码，保证模型转移设备时自动跟随
         """
@@ -111,7 +111,7 @@ if __name__ == '__main__':
     vocab_size = 20       # 示例词汇表大小
     embed_size = 128
     num_heads = 4
-    hidden_dim = 256
+    hidden_dim = 1024
     num_layers = 2
     max_length = 50
     pad_idx = 19          # 假设填充符索引为 19
