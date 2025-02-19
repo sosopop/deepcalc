@@ -1,16 +1,13 @@
-# 不精确计算器（Approximate Calculator）
+# 不精确计算器（Deep Calculator）
 
 基于Transformer解码器实现的数学表达式计算器，通过生成中间推理步骤提升计算准确率。本项目可作为学习Transformer架构和推理策略的实践案例。
 
-![transformer](https://raw.githubusercontent.com/sosopop/deepcalc/main/asserts/logo.png) 
+![Deep Calculator](https://raw.githubusercontent.com/sosopop/deepcalc/main/asserts/logo.png) 
 
 ## 技术原理
 
 ### Transformer解码器架构
 - 采用纯解码器结构
-- 位置编码（Positional Encoding）捕获序列顺序
-- 自注意力机制学习字符间长距离依赖
-- 屏蔽注意力（Masked Attention）防止信息泄露
 
 ### 推理增强策略
 模型通过生成中间计算步骤（思维链）来提升准确率：
@@ -20,6 +17,8 @@
 1. **分步计算**：将复杂运算分解为多个简单步骤
 2. **中间验证**：每个步骤结果作为后续计算的上下文
 3. **错误修正**：通过概率采样选择最优计算路径
+
+![Calculation Steps](https://raw.githubusercontent.com/sosopop/deepcalc/main/asserts/Code_MGB6TQR75u.gif) 
 
 ## 项目结构
 ```
