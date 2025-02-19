@@ -33,8 +33,8 @@ def main():
     # 参数设置（应与训练时保持一致）
     max_length = 256
     embed_size = 128
-    num_heads = 8
-    num_layers = 6
+    num_heads = 4
+    num_layers = 8
     hidden_dim = 2048
 
     # 设置运行设备
@@ -77,7 +77,8 @@ def main():
             continue
 
         # 截取问号部分（包括 '='）
-        question = user_input[:user_input.index('=')+1]
+        # question = user_input[:user_input.index('=')+1]
+        question = user_input
         result = question
 
         print("开始推理：")

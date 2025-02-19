@@ -32,35 +32,6 @@ def train(model, vocab, device, train_loader, optimizer, criterion, epoch):
     
     return epoch_loss / len(train_loader)
 
-def validate2(model, vocab, device, val_loader):
-    model.eval()
-    total = 0
-    correct = 0
-    end_token_idx = vocab.vocab_to_idx[vocab.end_token]
-    
-    with torch.no_grad():
-        pbar = tqdm.tqdm(val_loader, desc='Validating', leave=False)
-        for i, (batch, batch_str) in enumerate(pbar):
-            for _, sample_str in zip(batch, batch_str):
-                question = sample_str[0:sample_str.index('=')+1]
-                result = question
-                for _ in range(max_length - len(question)):
-                    input = torch.LongTensor(vocab.encode(result, max_length=max_length, pad=True, add_end=False)).unsqueeze(0).to(device)
-                    output = model(input)
-                    next_token = output[0, len(result) - 1].argmax().item()
-                    if next_token == end_token_idx:
-                        break
-                    result += vocab.idx_to_vocab[next_token]
-                    
-                if result == sample_str:
-                    correct += 1
-                total += 1
-                
-                pbar.set_postfix(accuracy=f"{correct/total:.5f}")
-    
-    accuracy = correct / total if total > 0 else 0
-    return accuracy
-
 def validate(model, vocab, device, val_loader):
     model.eval()
     total = 0
@@ -132,8 +103,8 @@ if __name__ == '__main__':
     num_samples = 100000
     max_digit = 20
     embed_size = 128
-    num_heads = 8
-    num_layers = 6
+    num_heads = 4
+    num_layers = 8
     hidden_dim = 2048
     learning_rate = 0.0001
     
@@ -178,11 +149,11 @@ if __name__ == '__main__':
     logging.info("Training...")
     for epoch in range(start_epoch, 1000):
         loss = train(model, vocab, device, train_loader, optimizer, criterion, epoch)
-        overall_accuracy = validate(model, vocab, device, val_loader)
-        logging.info(f"Epoch {epoch+1}: Loss={loss:.5f}, Overall Accuracy={overall_accuracy:.5f}, Current digits={current_digits}")
+        accuracy = validate(model, vocab, device, val_loader)
+        logging.info(f"Epoch {epoch+1}: Loss={loss:.5f}, Accuracy={accuracy:.5f}, Current digits={current_digits}")
 
-        if overall_accuracy > best_accuracy:
-            if overall_accuracy > 0.95:
+        if accuracy > best_accuracy:
+            if accuracy > 0.99:
                 if current_digits < max_digit:
                     if current_depth <= current_digits:
                         current_depth += 1
@@ -204,7 +175,7 @@ if __name__ == '__main__':
                             logging.info(sample_str)
                         break
             else:
-                best_accuracy = overall_accuracy
+                best_accuracy = accuracy
                 
             checkpoint_filepath = save_checkpoint(model, optimizer, epoch, loss, current_digits, current_depth, best_accuracy, checkpoint_dir)
             logging.info(f"Checkpoint saved: {checkpoint_filepath}")

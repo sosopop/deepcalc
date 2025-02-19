@@ -18,7 +18,10 @@ class CalculatorDataset(Dataset):
     def __getitem__(self, idx):
         exp_ast = calc_ast.generate_random_ast(max_depth=random.randint(1, self.max_depth), max_digit=self.max_digit)
         exp_str = calc_ast.ast_to_string(exp_ast)
-        result, steps = calc_ast.calculate_steps(exp_ast)
+        lexer = calc_ast.Lexer(exp_str)
+        parser = calc_ast.Parser(lexer)
+        parsed_ast = parser.parse()
+        result, steps = calc_ast.calculate_steps(parsed_ast)
         exp_str = f"{exp_str}=@{'|'.join(steps)}@={result}"
         encoded = self.vocab.encode(exp_str, max_length=self.max_length, pad=True)
         return torch.tensor(encoded, dtype=torch.long), exp_str
@@ -30,7 +33,7 @@ if __name__ == '__main__':
     max_digit = 2  # 测试时使用较小位数方便观察
     max_length = 256
     
-    dataset = CalculatorDataset(num_samples, max_length, max_digit, max_depth=3, vocab=vocab)
+    dataset = CalculatorDataset(num_samples, max_length, max_digit, max_depth=2, vocab=vocab)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
     
     for batch, batch_str in dataloader:

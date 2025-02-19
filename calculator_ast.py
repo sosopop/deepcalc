@@ -266,7 +266,7 @@ def generate_random_ast(max_depth=3, int_prob=1.0, max_digit=4, max_digit_ratio=
             k=1
         )[0]
         if choice == 'unary':
-            return UnaryOpNode(TokenType.MINUS, generate_random_ast(max_depth-1))
+            return UnaryOpNode(TokenType.MINUS, generate_random_ast(random.randint(0, max_depth-1), max_digit=max_digit, max_digit_ratio=max_digit_ratio))
         else:
             # 选择二元运算符（排除等号）
             op = random.choice([
@@ -277,17 +277,17 @@ def generate_random_ast(max_depth=3, int_prob=1.0, max_digit=4, max_digit_ratio=
             ])
             
             if op == TokenType.PLUS:
-                left = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
-                right = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
+                left = generate_random_ast(random.randint(0, max_depth-1), int_prob, max_digit, 0.5)
+                right = generate_random_ast(random.randint(0, max_depth-1), int_prob, max_digit, 0.5)
             elif op == TokenType.MINUS:
-                left = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
-                right = generate_random_ast(max_depth-1, int_prob, max_digit, 0.2)
+                left = generate_random_ast(random.randint(0, max_depth-1), int_prob, max_digit, 0.5)
+                right = generate_random_ast(random.randint(0, max_depth-1), int_prob, max_digit, 0.2)
             elif op == TokenType.MUL:
-                left = generate_random_ast(max_depth-1, int_prob, 2 if max_digit > 2 else max_digit, 0.5)
-                right = generate_random_ast(max_depth-1, int_prob, 2 if max_digit > 2 else max_digit, 0.5)
+                left = generate_random_ast(random.randint(0, max_depth-1), int_prob, 2 if max_digit > 2 else max_digit, 0.5)
+                right = generate_random_ast(random.randint(0, max_depth-1), int_prob, 2 if max_digit > 2 else max_digit, 0.5)
             elif op == TokenType.DIV:
-                left = generate_random_ast(max_depth-1, int_prob, max_digit, 0.5)
-                right = generate_random_ast(max_depth-1, int_prob, max_digit, 0.01)
+                left = generate_random_ast(random.randint(0, max_depth-1), int_prob, max_digit, 0.5)
+                right = generate_random_ast(random.randint(0, max_depth-1), int_prob, max_digit, 0.01)
             return BinaryOpNode(left, op, right)
 
 # ================================ AST转字符串 ================================
@@ -459,6 +459,45 @@ def mul_with_steps(a, b):
     steps_str, result_abs = _mul_positive(abs(a), abs(b))
     return f"{a}*{b}={steps_str}={sign * result_abs}"
 
+def div_with_steps1(a, b):
+    def _div_positive(a_pos, b_pos):
+        steps = []
+        current = 0
+        quotient = []
+        for digit in str(a_pos):
+            current = current * 10 + int(digit)
+            q = current // b_pos
+            if q == 0:
+                steps.append(f"0{current}")
+            else:
+                remainder = current % b_pos
+                steps.append(f"{q}{remainder}")
+                current = remainder
+            quotient.append(str(q))
+        quotient_str = ''.join(quotient).lstrip('0') or '0'
+        return ';'.join(steps), int(quotient_str), current
+
+    if b == 0:
+        return f"{a}/0=E"
+
+    sign = -1 if (a < 0) ^ (b < 0) else 1
+    abs_a = abs(a)
+    abs_b = abs(b)
+
+    steps_str, quotient, remainder = _div_positive(abs_a, abs_b)
+
+    # 调整商和余数以符合Python除法规则
+    if remainder != 0 and sign == -1:
+        quotient += 1
+        adjustment_steps = []
+        adjustment_steps.append(f"Adjust: {quotient-1}+1={quotient}")
+        remainder = abs_b - remainder
+        adjustment_steps.append(f"Remainder {abs_b - remainder}+{remainder}={abs_b}")
+        steps_str += ";" + ";".join(adjustment_steps)
+
+    final_quotient = sign * quotient
+    return f"{a}/{b}={steps_str}={final_quotient}"
+
 def div_with_steps(a, b):
     def _div_positive(a_pos, b_pos):
         steps = []
@@ -477,14 +516,19 @@ def div_with_steps(a, b):
         quotient_str = ''.join(quotient).lstrip('0') or '0'
         return ';'.join(steps), int(quotient_str), current
 
+    if b == 0:
+        return f"{a}/0=E"
+
     sign = -1 if (a < 0) ^ (b < 0) else 1
-    steps_str, quotient, remainder = _div_positive(abs(a), abs(b))
-    quotient = sign * quotient
-    remainder = remainder if a >= 0 else -remainder
-    # result = f"{quotient}_{remainder}" if remainder else quotient
-    # 不支持余数
-    result = quotient
-    return f"{a}/{b}={steps_str}={result}"
+    abs_a, abs_b = abs(a), abs(b)
+    steps_str, quotient_pos, remainder_pos = _div_positive(abs_a, abs_b)
+    
+    # 调整商以满足向下取整规则
+    if remainder_pos != 0 and sign == -1:
+        quotient_pos += 1  # 余数存在且结果为负时，商需+1
+    
+    final_quotient = sign * quotient_pos
+    return f"{a}/{b}={steps_str}={final_quotient}"
 
 def calculate_steps(node):
     """计算AST并记录计算步骤，忽略优先级括号，仅当一元操作数为负数时记录步骤"""
@@ -554,6 +598,9 @@ def calculate_steps(node):
 if __name__ == '__main__':
     # 测试用例
     test_cases = [
+        '8/-9',
+        '-9/5',
+        '(8+4*5)/7',
         '(6933-7631)*(8595/5412)',
         "--(3+--5)*-2",
         "5*-3",
@@ -566,13 +613,16 @@ if __name__ == '__main__':
         ast = parser.parse()
         print(f"原式: {expr}")
         print(f"语法树重生成：{ast_to_string(ast)}")
+        lexer = Lexer(ast_to_string(ast))
+        parser = Parser(lexer)
+        ast = parser.parse()
         result, steps = calculate_steps(ast)
         print(f"计算步骤: {steps}")
         print(f"最终结果: {result}\n")
 
     # 测试随机生成的表达式
     for _ in range(1000):
-        ast = generate_random_ast(max_depth=2)
+        ast = generate_random_ast(max_depth=2, max_digit=1)
         expr = ast_to_string(ast)
         print(f"随机生成的表达式: {expr}")
         lexer = Lexer(expr)
