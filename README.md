@@ -1,8 +1,8 @@
-# 不精确计算器（Deep Calculator）
+# 算不准的计算器（Deep Calculator）
 
 基于Transformer解码器实现的数学表达式计算器，通过生成中间推理步骤提升计算准确率。本项目可作为学习Transformer架构和推理策略的实践案例。
 
-![Deep Calculator](https://raw.githubusercontent.com/sosopop/deepcalc/main/asserts/logo.png) 
+![Deep Calculator](https://github.com/sosopop/deepcalc/raw/main/assets/logo.png) 
 
 ## 技术原理
 
@@ -18,7 +18,7 @@
 2. **中间验证**：每个步骤结果作为后续计算的上下文
 3. **错误修正**：通过概率采样选择最优计算路径
 
-![Calculation Steps](https://raw.githubusercontent.com/sosopop/deepcalc/main/asserts/Code_MGB6TQR75u.gif) 
+![Calculation Steps](https://github.com/sosopop/deepcalc/raw/main/assets/Code_MGB6TQR75u.gif) 
 
 ## 项目结构
 ```
