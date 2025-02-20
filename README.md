@@ -1,6 +1,6 @@
 # 算不太准的计算器（Deep Calculator）
 
-基于Transformer解码器实现的数学表达式计算器，通过生成中间推理步骤提升计算准确率。本项目可作为学习Transformer架构和推理策略的实践案例。
+基于Transformer解码器实现的数学表达式计算器，通过思维链生成中间推理步骤提升计算准确率。本项目可作为学习Transformer架构和推理策略的实践案例。
 
 ![Deep Calculator](https://github.com/sosopop/deepcalc/raw/main/assets/logo.png) 
 
