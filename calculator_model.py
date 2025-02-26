@@ -52,13 +52,22 @@ class TransformerDecoderModel(nn.Module):
         self.register_buffer('tgt_mask_base', self.generate_square_subsequent_mask(max_length))
 
         # 构造 Transformer decoder 层（注意：使用 batch_first=True）
-        decoder_layer = nn.TransformerDecoderLayer(
+        # decoder_layer = nn.TransformerDecoderLayer(
+        #     d_model=embed_size,
+        #     nhead=num_heads,
+        #     dim_feedforward=hidden_dim,
+        #     batch_first=True
+        # )
+        # self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+        
+        encoder_layer = nn.TransformerEncoderLayer(
             d_model=embed_size,
             nhead=num_heads,
             dim_feedforward=hidden_dim,
             batch_first=True
         )
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        
         # 输出映射层
         self.fc = nn.Linear(embed_size, vocab_size)
 
@@ -91,16 +100,16 @@ class TransformerDecoderModel(nn.Module):
         # else:
         #     tgt_mask = None
 
-        # 使用预生成的 memory 基础张量（全零），根据当前序列长度切片并扩展 batch_size
-        memory = torch.zeros(batch_size, seq_len, self.embed_size, device=tgt.device)
-
-        # Transformer decoder（注意：由于设置了 batch_first=True，无需转置）
-        output = self.transformer_decoder(
-            tgt=tgt_emb,
-            memory=memory,
-            tgt_mask=tgt_mask,
-            tgt_key_padding_mask=tgt_padding_mask
-        )
+        # # 使用预生成的 memory 基础张量（全零），根据当前序列长度切片并扩展 batch_size
+        # memory = torch.zeros(batch_size, seq_len, self.embed_size, device=tgt.device)
+        # # Transformer decoder（注意：由于设置了 batch_first=True，无需转置）
+        # output = self.transformer_decoder(
+        #     tgt=tgt_emb,
+        #     memory=memory,
+        #     tgt_mask=tgt_mask,
+        #     tgt_key_padding_mask=tgt_padding_mask
+        # )
+        output = self.transformer_encoder(src=tgt_emb, mask=tgt_mask, src_key_padding_mask=tgt_padding_mask)
         output = self.fc(output)
         return output
 
