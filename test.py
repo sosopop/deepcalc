@@ -56,13 +56,12 @@ def main():
 
     # 创建模型实例
     model = calculator_model.TransformerDecoderModel(
-        vocab_size=vocab.vocab_size,
+        vocab=vocab,
         embed_size=128,
         num_heads=4,
         hidden_dim=2048,
         num_layers=8,
-        max_length=max_length,
-        pad_idx=vocab.vocab_to_idx["#"]
+        max_length=max_length
     ).to(device)
 
     # 加载训练好的模型
