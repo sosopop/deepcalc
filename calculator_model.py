@@ -47,15 +47,15 @@ class MultiHeadAttention(nn.Module):
         a = F.scaled_dot_product_attention(Q, K, V, is_causal=mask is not None)
         o = a.permute(0, 2, 1, 3).flatten(start_dim=2)
         return self.W_o(o)
-
+    
 class SelfAttentionBlock(nn.Module):
     """单层自注意力 + 前馈网络"""
-    def __init__(self, model_dim, num_heads, ff_dim=2048, dropout=0.1):
+    def __init__(self, model_dim, num_heads, ff_dim=2048, dropout=0.05):
         super().__init__()
         self.self_attn = MultiHeadAttention(model_dim, num_heads)
         self.feed_forward = nn.Sequential(
             nn.Linear(model_dim, ff_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(ff_dim, model_dim)
         )
         self.norm1 = nn.LayerNorm(model_dim)
@@ -122,14 +122,11 @@ class CalculatorModel(nn.Module):
     def forward(self, input_seq):
         # 生成掩码
         causal_mask = self._create_causal_mask(input_seq)
-        
         # 构建输入表示
-        embedded = self.token_embed(input_seq) * math.sqrt(self.embed_dim)
+        embedded = self.token_embed(input_seq)
         position_aware = self.position_enc(embedded)
-        
         # 特征处理
         processed = self.feature_processor(position_aware, causal_mask)
-        
         # 生成输出
         return self.output_proj(processed)
 
