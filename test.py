@@ -55,13 +55,13 @@ def main():
     end_token_idx = vocab.vocab_to_idx[end_token]
 
     # 创建模型实例
-    model = calculator_model.TransformerDecoderModel(
-        vocab=vocab,
-        embed_size=128,
-        num_heads=4,
-        hidden_dim=2048,
-        num_layers=8,
-        max_length=max_length
+    model = calculator_model.CalculatorModel(
+        vocab,
+        128,
+        4,
+        2048,
+        8,
+        max_length
     ).to(device)
 
     # 加载训练好的模型

@@ -100,7 +100,7 @@ def validate(model, vocab, device, val_loader):
 
 def save_checkpoint(model, optimizer, epoch, loss, current_digits, current_depth, accuracy, checkpoint_dir):
     os.makedirs(checkpoint_dir, exist_ok=True)
-    checkpoint_filename = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch+1}_loss_{loss:.3f}_accuracy_{accuracy:.5f}_digits_{current_digits}.pth")
+    checkpoint_filename = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch+1}_loss_{loss:.5f}_accuracy_{accuracy:.5f}_digits_{current_digits}.pth")
     torch.save({
         'epoch': epoch + 1,
         'model_state_dict': model.state_dict(),
@@ -137,12 +137,12 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     vocab = calculator_vocab.CalculatorVocab()
     
-    model = calculator_model.TransformerDecoderModel(vocab,
-                                                     embed_size=embed_size,
-                                                     num_heads=num_heads,
-                                                     hidden_dim=hidden_dim,
-                                                     num_layers=num_layers,
-                                                     max_length=max_length).to(device)
+    model = calculator_model.CalculatorModel(vocab,
+                                            embed_size,
+                                            num_heads,
+                                            hidden_dim,
+                                            num_layers,
+                                            max_length).to(device)
     criterion = nn.CrossEntropyLoss(ignore_index=vocab.vocab_to_idx[vocab.pad_token], reduction='none')
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 

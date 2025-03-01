@@ -44,13 +44,13 @@ def main():
     vocab = calculator_vocab.CalculatorVocab()
 
     # 实例化模型
-    model = calculator_model.TransformerDecoderModel(
+    model = calculator_model.CalculatorModel(
         vocab,
-        embed_size=embed_size,
-        num_heads=num_heads,
-        hidden_dim=hidden_dim,
-        num_layers=num_layers,
-        max_length=max_length
+        embed_size,
+        num_heads,
+        hidden_dim,
+        num_layers,
+        max_length
     )
 
     # 加载最近的 checkpoint

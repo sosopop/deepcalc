@@ -33,13 +33,13 @@ def export_model(checkpoint_dir, export_path, max_length=256):
     logging.info(f"Loading checkpoint: {latest_checkpoint}")
 
     # 创建模型实例（参数需与训练时一致）
-    model = calculator_model.TransformerDecoderModel(
-        vocab=vocab,
-        embed_size=128,
-        num_heads=4,
-        hidden_dim=2048,
-        num_layers=8,
-        max_length=max_length
+    model = calculator_model.CalculatorModel(
+        vocab,
+        128,
+        4,
+        2048,
+        8,
+        max_length
     ).to(device)
     
     # 加载检查点
