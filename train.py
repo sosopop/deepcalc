@@ -9,7 +9,9 @@ import calculator_dataset_ast_reason as calculator_dataset
 import tqdm
 import os
 import logging
+from torch.amp import GradScaler
 
+# 设置日志输出级别
 logging.basicConfig(level = logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def train(model, vocab, device, train_loader, optimizer, criterion, epoch):
@@ -24,34 +26,39 @@ def train(model, vocab, device, train_loader, optimizer, criterion, epoch):
         tgt_output = tgt[:, 1:].to(device)
 
         optimizer.zero_grad()
-        output = model(tgt_input)
         
-        # 找出每个样本中第一个等号的位置
-        eq_positions = torch.argmax((tgt_output == eq_idx).int(), dim=1)  # (batch_size,)
-        cols = torch.arange(tgt_output.size(1)).view(1, -1)  # (1, seq_len)
-        cols = cols.expand(tgt_output.size(0), -1)  # (batch_size, seq_len)
-        cols = cols.to(device)
+        with torch.amp.autocast('cuda'):
+            output = model(tgt_input)
+            # 找出每个样本中第一个等号的位置
+            eq_positions = torch.argmax((tgt_output == eq_idx).int(), dim=1)  # (batch_size,)
+            cols = torch.arange(tgt_output.size(1)).view(1, -1)  # (1, seq_len)
+            cols = cols.expand(tgt_output.size(0), -1)  # (batch_size, seq_len)
+            cols = cols.to(device)
+            
+            # 生成eq_mask矩阵：当列位置 > 等号位置时为True（需要屏蔽）
+            eq_mask = cols > eq_positions.view(-1, 1) 
+            
+            # 计算每个位置的损失
+            output_flat = output.view(-1, output.size(-1))  # (batch*seq, vocab)
+            tgt_flat = tgt_output.contiguous().view(-1)      # (batch*seq)
+            loss_per_token = criterion(output_flat, tgt_flat)
+            
+            # 应用eq_mask，仅保留需要计算损失的token
+            mask_flat = eq_mask.view(-1)
+            selected_loss = loss_per_token[mask_flat]
+            
+            # 计算平均损失，处理无有效损失的情况
+            if selected_loss.numel() > 0:
+                loss = selected_loss.mean()
+            else:
+                loss = torch.tensor(0.0, device=device)
         
-        # 生成eq_mask矩阵：当列位置 > 等号位置时为True（需要屏蔽）
-        eq_mask = cols > eq_positions.view(-1, 1) 
+        # loss.backward()
+        # optimizer.step()
         
-        # 计算每个位置的损失
-        output_flat = output.view(-1, output.size(-1))  # (batch*seq, vocab)
-        tgt_flat = tgt_output.contiguous().view(-1)      # (batch*seq)
-        loss_per_token = criterion(output_flat, tgt_flat)
-        
-        # 应用eq_mask，仅保留需要计算损失的token
-        mask_flat = eq_mask.view(-1)
-        selected_loss = loss_per_token[mask_flat]
-        
-        # 计算平均损失，处理无有效损失的情况
-        if selected_loss.numel() > 0:
-            loss = selected_loss.mean()
-        else:
-            loss = torch.tensor(0.0, device=device)
-        
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         
         epoch_loss += loss.item()
         pbar.set_postfix(loss=f"{epoch_loss / (pbar.n + 1):.5f}")
@@ -135,8 +142,8 @@ if __name__ == '__main__':
     learning_rate = 0.0001
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    scaler = GradScaler(enabled=True)
     vocab = calculator_vocab.CalculatorVocab()
-    
     model = calculator_model.CalculatorModel(vocab,
                                             embed_size,
                                             num_heads,
@@ -154,10 +161,12 @@ if __name__ == '__main__':
     checkpoint_dir = "checkpoints"
     
     if os.path.exists(checkpoint_dir):
-        latest_checkpoint_path = max([os.path.join(checkpoint_dir, f) for f in os.listdir(checkpoint_dir) if f.startswith('checkpoint_epoch_')], key=os.path.getctime)
-        if latest_checkpoint_path:
-            start_epoch, loss, current_digits, current_depth, best_accuracy = load_checkpoint(latest_checkpoint_path, model, optimizer)
-            logging.info(f"Resuming from epoch {start_epoch}, loss {loss:.5f}, current_digits {current_digits}, current_depth {current_depth}, best_accuracy {best_accuracy:.5f}")
+        checkpoint_files = [os.path.join(checkpoint_dir, f) for f in os.listdir(checkpoint_dir) if f.startswith('checkpoint_epoch_')]
+        if len(checkpoint_files) > 0:
+            latest_checkpoint_path = max(checkpoint_files, key=os.path.getctime)
+            if latest_checkpoint_path:
+                start_epoch, loss, current_digits, current_depth, best_accuracy = load_checkpoint(latest_checkpoint_path, model, optimizer)
+                logging.info(f"Resuming from epoch {start_epoch}, loss {loss:.5f}, current_digits {current_digits}, current_depth {current_depth}, best_accuracy {best_accuracy:.5f}")
 
     train_dataset = calculator_dataset.CalculatorDataset(num_samples, max_length, current_digits, current_depth, vocab)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
