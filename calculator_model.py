@@ -2,9 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Iterable, Optional, Tuple
 
-    
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=256):
         """
