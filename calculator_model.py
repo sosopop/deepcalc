@@ -46,6 +46,17 @@ class MultiHeadAttention(nn.Module):
         V = self.W_v(x).view(*x.shape[:2], self.num_heads, -1).permute(0, 2, 1, 3)
         a = F.scaled_dot_product_attention(Q, K, V, is_causal=mask is not None)
         o = a.permute(0, 2, 1, 3).flatten(start_dim=2)
+        
+        # 具体实现
+        # n_batch, n_ctx, n_state = x.shape
+        # scale = (n_state // self.num_heads) ** -0.25
+        # qk = (Q * scale) @ (K * scale).transpose(-1, -2)
+        # if mask is not None:
+        #     qk = qk + mask[:n_ctx, :n_ctx]
+        # qk = qk.float()
+        # w = F.softmax(qk, dim=-1).to(x.dtype)
+        # o = (w @ V).permute(0, 2, 1, 3).flatten(start_dim=2)
+        
         return self.W_o(o)
     
 class SelfAttentionBlock(nn.Module):
