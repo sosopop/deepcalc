@@ -44,19 +44,25 @@ class MultiHeadAttention(nn.Module):
         Q = self.W_q(x).view(*x.shape[:2], self.num_heads, -1).permute(0, 2, 1, 3)
         K = self.W_k(x).view(*x.shape[:2], self.num_heads, -1).permute(0, 2, 1, 3)
         V = self.W_v(x).view(*x.shape[:2], self.num_heads, -1).permute(0, 2, 1, 3)
-        # a = F.scaled_dot_product_attention(Q, K, V, is_causal=mask is not None)
-        # o = a.permute(0, 2, 1, 3).flatten(start_dim=2)
+        
+        scale = (self.d_model // self.num_heads) ** -0.5  # 显式计算缩放因子
+        w = F.scaled_dot_product_attention(
+            Q, K, V, 
+            attn_mask=mask,
+            is_causal=mask is not None, 
+            scale=scale)
         
         # 具体实现
-        n_batch, n_ctx, n_state = x.shape
-        # 测试当前不除以缩放收敛速度更快
-        qk = torch.matmul(Q, K.transpose(-2, -1)) / ((n_state // self.num_heads) ** 0.5)
-        if mask is not None:
-            qk = qk + mask[:n_ctx, :n_ctx]
-        qk = qk.float()
-        w = F.softmax(qk, dim=-1).to(x.dtype)
-        o = (w @ V).permute(0, 2, 1, 3).flatten(start_dim=2)
+        # n_batch, n_ctx, n_state = x.shape
+        # scale = 1 /  ((n_state // self.num_heads) ** 0.5)
+        # qk = torch.matmul(Q, K.transpose(-2, -1)) * scale
+        # if mask is not None:
+        #     qk = qk + mask[:n_ctx, :n_ctx]
+        # qk = qk.float()
+        # w = F.softmax(qk, dim=-1).to(x.dtype)
+        # w = w @ V
         
+        o = w.permute(0, 2, 1, 3).flatten(start_dim=2)
         return self.W_o(o)
     
 class SelfAttentionBlock(nn.Module):
@@ -66,7 +72,7 @@ class SelfAttentionBlock(nn.Module):
         self.self_attn = MultiHeadAttention(model_dim, num_heads)
         self.feed_forward = nn.Sequential(
             nn.Linear(model_dim, ff_dim),
-            nn.LeakyReLU(),
+            nn.GELU(),
             nn.Linear(ff_dim, model_dim)
         )
         self.norm1 = nn.LayerNorm(model_dim)
@@ -129,10 +135,10 @@ class CalculatorModel(nn.Module):
             torch.full((seq_len, seq_len), float("-inf"), device=seq.device),
             diagonal=1
         )
-
+        
     def forward(self, input_seq):
         # 生成掩码
-        causal_mask = self._create_causal_mask(input_seq)
+        causal_mask = self._create_causal_mask(input_seq).to(input_seq.device)
         # 构建输入表示
         embedded = self.token_embed(input_seq)
         position_aware = self.position_enc(embedded)
@@ -154,6 +160,7 @@ if __name__ == '__main__':
 
     import calculator_vocab
     import calculator_dataset_ast_reason as calculator_dataset
+    
     vocab = calculator_vocab.CalculatorVocab()
     num_samples = 10
     max_digit = 2  # 测试时使用较小位数方便观察
@@ -176,6 +183,5 @@ if __name__ == '__main__':
         tgt_input = tgt[:, :-1]
         tgt_output = tgt[:, 1:]
         
-
         output = model(tgt)
         print("训练模式下，模型输出形状：", output.shape)
