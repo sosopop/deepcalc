@@ -64,7 +64,18 @@ class MultiHeadAttention(nn.Module):
         
         o = w.permute(0, 2, 1, 3).flatten(start_dim=2)
         return self.W_o(o)
+
+class DyT(nn.Module):
+    def __init__(self, C, init_alpha):
+        super(DyT, self).__init__()
+        self.alpha = nn.Parameter(torch.ones(1) * init_alpha)
+        self.gamma = nn.Parameter(torch.ones(C))
+        self.beta = nn.Parameter(torch.zeros(C))
     
+    def forward(self, x):
+        x = torch.tanh(self.alpha * x)
+        return self.gamma * x + self.beta
+
 class SelfAttentionBlock(nn.Module):
     """单层自注意力 + 前馈网络"""
     def __init__(self, model_dim, num_heads, ff_dim=2048, dropout=0.05):
@@ -77,6 +88,8 @@ class SelfAttentionBlock(nn.Module):
         )
         self.norm1 = nn.LayerNorm(model_dim)
         self.norm2 = nn.LayerNorm(model_dim)
+        # self.norm1 = DyT(model_dim, 1.0)
+        # self.norm2 = DyT(model_dim, 1.0)
         self.dropout = nn.Dropout(dropout)
         
     def forward(self, x, mask=None):
